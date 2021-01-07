@@ -1,0 +1,8 @@
+{
+  "domain": "elec_balance",
+  "name": "Elec Balance",
+  "documentation": "https://github.com/imseon/ha_elec_balance",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@imseon"]
+}
