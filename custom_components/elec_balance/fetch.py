@@ -64,7 +64,7 @@ def getCaptcha():
     im = Image.open(BytesIO(png))
     img_size = im.size
     scale = img_size[0] / 1920
-    el_captcha = driver.find_element_by_id('imgVcode')
+    el_captcha = driver.find_element_by_css_selector('.code-mask')
     location = el_captcha.location
     size = el_captcha.size
 
@@ -116,30 +116,34 @@ def login():
     global SITE_USER
     global SITE_PASS
     try:
-        driver.get("http://www.95598.cn/member/login.shtml")
+        driver.get("https://www.95598.cn/osgweb/login")
     except TimeoutException:
         log('open login page timeout, retry')
         return login()
     log('opened page: ', driver.current_url)
-    el_username = driver.find_element_by_id('loginName')
+    wait.until(
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, ".selectlogin-type .user"))
+    )
+    el_switch = driver.find_element_by_css_selector('.selectlogin-type .user')
+    el_switch.click()
+    el_username = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(1) input')
     el_username.send_keys(SITE_USER)
-    el_password = driver.find_element_by_id('txPwd')
-    el_password.click()
-    el_password = driver.find_element_by_id('pwd')
+    el_password = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(2) input')
     el_password.clear()
     el_password.send_keys(SITE_PASS)
     log('ready to recognize captcha')
     captcha = getCaptcha()
     log('recognized captcha:', captcha)
     # driver.find_element_by_id('imgVcode').click()
-    el_captcha = driver.find_element_by_id('code')
+    el_captcha = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(3) input')
     el_captcha.send_keys(captcha)
-    driver.find_element_by_class_name('submitBtn').click()
+    driver.find_element_by_css_selector('.input-login-area:nth-child(1) button').click()
     log('submit login')
-    driver.save_screenshot('index.png')
+    driver.save_screenshot('screen.png')
     try:
         WebDriverWait(driver, 3).until(EC.text_to_be_present_in_element(
-            (By.ID, "loginMsg"), '验证码错误，请重新输入!'))
+            (By.CSS_SELECTOR, ".errmsg-tip span"), '请输入正确的验证码！'))
         log('captcha error, attempt to relogin 5 seconds later')
         time.sleep(5)
         return login()
@@ -156,7 +160,7 @@ def getBalance():
     global wait
     try:
         driver.get(
-            'http://www.95598.cn/95598/per/account/initSmartConsInfo?partNo=PM02001007')
+            'https://www.95598.cn/osgweb/userAcc')
         log('opened balance page:', driver.current_url)
     except TimeoutException:
         log('open balance page timeout. will retry in 5 seconds')
@@ -170,10 +174,10 @@ def getBalance():
     try:
         wait.until(
             EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "#smartTable tbody tr:nth-child(1) td:nth-child(3)"))
+                (By.CSS_SELECTOR, ".acccount .amt:nth-child(1) .num"))
         )
         balance = driver.find_element_by_css_selector(
-            '#smartTable tbody tr:nth-child(1) td:nth-child(3)').text
+            '.acccount .amt:nth-child(1) .num').text
         return balance
     except TimeoutException:
         log('get balance timeout')
