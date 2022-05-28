@@ -1,0 +1,2 @@
+nginx
+tail -f /var/log/elec_balance.log

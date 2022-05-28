@@ -36,7 +36,9 @@ options.set_capability('unhandledPromptBehavior', 'accept')
 
 driver = None
 wait = None
-
+maxTry = 5
+tryCount = 0
+screenshot_path = os.environ['screenshot_path'] if 'screenshot_path' in os.environ else ''
 
 def initDriver():
     global driver
@@ -64,7 +66,7 @@ def getCaptcha():
     im = Image.open(BytesIO(png))
     img_size = im.size
     scale = img_size[0] / 1920
-    el_captcha = driver.find_element_by_css_selector('.code-mask')
+    el_captcha = driver.find_element(By.CSS_SELECTOR, '.code-mask')
     location = el_captcha.location
     size = el_captcha.size
 
@@ -115,73 +117,96 @@ def login():
     global driver
     global SITE_USER
     global SITE_PASS
+    global tryCount
+    global maxTry
+    global screenshot_path
+    tryCount += 1
     try:
         driver.get("https://www.95598.cn/osgweb/login")
     except TimeoutException:
-        log('open login page timeout, retry')
-        return login()
+        log('open login page timeout, retry:', str(tryCount))
+        if tryCount < maxTry:
+            return login()
+        else:
+            return False
     log('opened page: ', driver.current_url)
     wait.until(
         EC.presence_of_element_located(
             (By.CSS_SELECTOR, ".selectlogin-type .user"))
     )
-    el_switch = driver.find_element_by_css_selector('.selectlogin-type .user')
-    el_switch.click()
-    el_username = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(1) input')
-    el_username.send_keys(SITE_USER)
-    el_password = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(2) input')
-    el_password.clear()
-    el_password.send_keys(SITE_PASS)
-    log('ready to recognize captcha')
-    captcha = getCaptcha()
-    log('recognized captcha:', captcha)
-    # driver.find_element_by_id('imgVcode').click()
-    el_captcha = driver.find_element_by_css_selector('.password_form .el-form-item:nth-child(3) input')
-    el_captcha.send_keys(captcha)
-    driver.find_element_by_css_selector('.input-login-area:nth-child(1) button').click()
-    log('submit login')
-    driver.save_screenshot('screen.png')
     try:
-        WebDriverWait(driver, 3).until(EC.text_to_be_present_in_element(
-            (By.CSS_SELECTOR, ".errmsg-tip span"), '请输入正确的验证码！'))
-        log('captcha error, attempt to relogin 5 seconds later')
-        time.sleep(5)
-        return login()
-    except TimeoutException:
-        return
-    except AttributeError:
-        return
-    except UnexpectedAlertPresentException:
-        return
-
+        el_switch = driver.find_element(By.CSS_SELECTOR, '.selectlogin-type .user')
+        el_switch.click()
+        time.sleep(1)
+        el_username = driver.find_element(By.CSS_SELECTOR, '.password_form .el-form-item:nth-child(1) input')
+        el_username.send_keys(SITE_USER)
+        el_password = driver.find_element(By.CSS_SELECTOR, '.password_form .el-form-item:nth-child(2) input')
+        el_password.clear()
+        el_password.send_keys(SITE_PASS)
+        log('ready to recognize captcha')
+        captcha = getCaptcha()
+        log('recognized captcha:', captcha)
+        el_captcha = driver.find_element(By.CSS_SELECTOR, '.password_form .el-form-item:nth-child(3) input')
+        el_captcha.send_keys(captcha)
+        driver.find_element(By.CSS_SELECTOR, '.input-login-area:nth-child(1) button').click()
+        log('submit login')
+        time.sleep(3)
+        log('redirected:', driver.current_url)
+        driver.save_screenshot(screenshot_path + 'login.png')
+        log('login screenshot has been taken')
+        if '/login' not in driver.current_url:
+            return True
+        if tryCount < maxTry:
+            return login()
+        else:
+            return False
+    except:
+        driver.save_screenshot(screenshot_path + 'login.png')
+        log('login screenshot has been taken')
+        if tryCount < maxTry:
+            return login()
+        else:
+            return False 
 
 def getBalance():
     global driver
     global wait
+    global tryCount
+    global maxTry
+    global screenshot_path
+    tryCount += 1
     try:
         driver.get(
             'https://www.95598.cn/osgweb/userAcc')
         log('opened balance page:', driver.current_url)
+        if '/login' in driver.current_url:
+            return None
     except TimeoutException:
-        log('open balance page timeout. will retry in 5 seconds')
+        log('get balance timeout. retry:', str(tryCount))
+        driver.save_screenshot(screenshot_path + 'account.png')
+        log('account screenshot has been taken')
         time.sleep(5)
-        return getBalance()
-    except UnexpectedAlertPresentException:
-        log('alert exception. will retry in 5 seconds')
-        time.sleep(5)
-        return getBalance()
-
+        if tryCount < maxTry:
+            return getBalance()
+        else:
+            return None
     try:
         wait.until(
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, ".acccount .amt:nth-child(1) .num"))
         )
-        balance = driver.find_element_by_css_selector(
+        balance = driver.find_element(By.CSS_SELECTOR, 
             '.acccount .amt:nth-child(1) .num').text
         return balance
     except TimeoutException:
-        log('get balance timeout')
-        return getBalance()
+        log('get balance timeout. retry:', str(tryCount))
+        driver.save_screenshot(screenshot_path + 'account.png')
+        log('account screenshot has been taken')
+        time.sleep(5)
+        if tryCount < maxTry:
+            return getBalance()
+        else:
+            return None
 
 
 def writeToFile(balance):
@@ -195,21 +220,34 @@ def writeToFile(balance):
 
 def fetchBalance():
     global driver
+    global tryCount
+    global maxTry
     initDriver()
     driver.set_window_size(1920, 1080)
     log('resize window to 1920*1080')
-    login()
-    log('login success')
-    time.sleep(3)
-    balance = getBalance()
-    log('got balance:', balance)
-    if balance:
-        writeToFile(json.dumps({'balance': balance, 'updated_at': time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime())}))
-    return balance
-
+    # driver.get('https://www.95598.cn/osgweb/my95598')
+    # time.sleep(10)
+    # driver.save_screenshot(screenshot_path + 'my95598.png')
+    # log('my95598 screenshot has been taken')
+    # time.sleep(10)
+    tryCount = 0
+    if login():
+        log('login success')
+        time.sleep(1)
+        tryCount = 0
+        balance = getBalance()
+        if balance:
+            log('got balance:', balance)
+            writeToFile(json.dumps({'balance': balance, 'updated_at': time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime())}))
+        else:
+            log('get balance failed.')
+    else:
+        log('login failed.')
+        
 
 try:
     fetchBalance()
 finally:
     driver.quit()
+    log('done.')
